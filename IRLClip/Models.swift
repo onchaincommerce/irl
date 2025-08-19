@@ -23,6 +23,12 @@ struct ClaimData: Codable {
     }
 }
 
+struct WalletUser {
+    let id: String
+    let address: String
+    let phone: String
+}
+
 enum AppMode {
     case initial
     case sender

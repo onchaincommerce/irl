@@ -23,6 +23,16 @@ struct ClipContentView: View {
     @State private var usdcBalance: Double = 0.0
     @State private var isCheckingBalance = false
     
+    // SMS OTP states
+    @State private var phoneNumber: String = ""
+    @State private var otp: String = ""
+    @State private var showOTPInput: Bool = false
+    @State private var isSendingOTP: Bool = false
+    @State private var isVerifyingOTP: Bool = false
+    @State private var walletUser: WalletUser? = nil
+    @State private var smsMessage: String = ""
+    @State private var activeOTPIndex: Int = 0
+    
     enum AppMode {
         case initial
         case sender
@@ -37,13 +47,16 @@ struct ClipContentView: View {
             GraphPaperBackground()
             
             VStack(spacing: 0) {
-                // Header with devil emoji
+                // Header with app icon
                 VStack(spacing: 16) {
-                    Image("irl_demon")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
+                    Image(systemName: "iphone.radiowaves.left.and.right")
+                        .font(.system(size: 80))
+                        .foregroundColor(.blue)
                         .frame(width: 100, height: 100)
-                        .clipShape(Circle())
+                        .background(
+                            Circle()
+                                .fill(.blue.opacity(0.1))
+                        )
                         .overlay(
                             Circle()
                                 .stroke(Color.blue, lineWidth: 4)
@@ -126,30 +139,87 @@ struct ClipContentView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
                 
-                // SMS Authentication Button
-                Button(action: authenticateWithSMS) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "message.fill")
-                            .font(.title2)
-                        
-                        Text("Sign In with SMS")
+                // Phone number input
+                VStack(spacing: 16) {
+                    HStack {
+                        Image(systemName: "phone.fill")
+                            .foregroundColor(.blue)
+                        TextField("+1 (555) 123-4567", text: $phoneNumber)
                             .font(.title3)
-                            .fontWeight(.semibold)
+                            .keyboardType(.phonePad)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: phoneNumber) { _, newValue in
+                                // Auto-format phone number
+                                phoneNumber = formatPhoneNumber(newValue)
+                                
+                                // Auto-progress to OTP if phone number is complete
+                                if newValue.count >= 14 { // +1 (555) 123-4567
+                                    sendOTP()
+                                }
+                            }
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background(
-                        LinearGradient(
-                            colors: [.blue, .blue.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                    .padding(.horizontal, 20)
+                    
+                    // Send OTP button
+                    Button(action: sendOTP) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "message.fill")
+                                .font(.title2)
+                            
+                            Text("Sign in")
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(
+                            LinearGradient(
+                                colors: [.blue, .blue.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .cornerRadius(16)
-                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                        .cornerRadius(16)
+                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    }
+                    .buttonStyle(ScaleButtonStyle())
+                    .disabled(phoneNumber.count < 14 || isSendingOTP)
                 }
-                .buttonStyle(ScaleButtonStyle())
+                
+                // OTP input (shown after phone number is entered)
+                if showOTPInput {
+                    VStack(spacing: 16) {
+                        Text("Enter the 6-digit code sent to your phone")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        
+                        HStack(spacing: 12) {
+                            ForEach(0..<6, id: \.self) { index in
+                                OTPDigitField(
+                                    digit: binding(for: index),
+                                    isActive: index == activeOTPIndex
+                                )
+                            }
+                        }
+                        .onChange(of: otp) { _, newValue in
+                            // Auto-verify when 6 digits are entered
+                            if newValue.count == 6 {
+                                verifyOTP()
+                            }
+                        }
+                        
+                        // Resend OTP button
+                        Button("Resend Code") {
+                            sendOTP()
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .disabled(isVerifyingOTP)
+                    }
+                    .padding(.top, 20)
+                }
                 
                 // Security info
                 VStack(spacing: 8) {
@@ -505,12 +575,80 @@ struct ClipContentView: View {
         }
     }
     
-    private func authenticateWithSMS() {
-        // TODO: Implement CDP Embedded Wallets authentication
-        // For now, simulate authentication
-        isAuthenticated = true
-        walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
-        usdcBalance = 100.0 // Mock balance
+    private func formatPhoneNumber(_ input: String) -> String {
+        let cleaned = input.filter { $0.isNumber }
+        let mask = "+1 (XXX) XXX-XXXX"
+        var result = ""
+        var index = cleaned.startIndex
+        
+        for ch in mask {
+            if ch == "X" {
+                if index < cleaned.endIndex {
+                    result.append(cleaned[index])
+                    index = cleaned.index(after: index)
+                } else {
+                    result.append("0")
+                }
+            } else {
+                result.append(ch)
+            }
+        }
+        return result
+    }
+    
+    private func sendOTP() {
+        guard phoneNumber.count >= 14 else { return }
+        
+        isSendingOTP = true
+        
+        // TODO: Implement real CDP SMS sending
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            isSendingOTP = false
+            showOTPInput = true
+            smsMessage = "Success! OTP sent to \(phoneNumber)"
+        }
+    }
+    
+    private func verifyOTP() {
+        guard otp.count == 6 else { return }
+        
+        isVerifyingOTP = true
+        
+        // TODO: Implement real CDP OTP verification
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            isVerifyingOTP = false
+            isAuthenticated = true
+            walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+            usdcBalance = 100.0 // Mock balance
+            smsMessage = "Wallet created successfully!"
+        }
+    }
+    
+    private func binding(for index: Int) -> Binding<String> {
+        Binding(
+            get: {
+                if index < otp.count {
+                    return String(otp[otp.index(otp.startIndex, offsetBy: index)])
+                }
+                return ""
+            },
+            set: { newValue in
+                if newValue.count <= 1 {
+                    if index < otp.count {
+                        let startIndex = otp.index(otp.startIndex, offsetBy: index)
+                        let endIndex = otp.index(startIndex, offsetBy: 1)
+                        otp.replaceSubrange(startIndex..<endIndex, with: newValue)
+                    } else {
+                        otp.append(newValue)
+                    }
+                    
+                    // Move to next field
+                    if newValue.count == 1 && index < 5 {
+                        activeOTPIndex = index + 1
+                    }
+                }
+            }
+        )
     }
     
     private func disconnectWallet() {
