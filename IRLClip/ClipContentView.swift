@@ -29,9 +29,6 @@ struct ClipContentView: View {
     @State private var showOTPInput: Bool = false
     @State private var isSendingOTP: Bool = false
     @State private var isVerifyingOTP: Bool = false
-    @State private var walletUser: WalletUser? = nil
-    @State private var smsMessage: String = ""
-    @State private var activeOTPIndex: Int = 0
     
     enum AppMode {
         case initial
@@ -139,26 +136,13 @@ struct ClipContentView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
                 
-                // Phone number input
-                VStack(spacing: 16) {
-                    HStack {
-                        Image(systemName: "phone.fill")
-                            .foregroundColor(.blue)
-                        TextField("+1 (555) 123-4567", text: $phoneNumber)
-                            .font(.title3)
-                            .keyboardType(.phonePad)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: phoneNumber) { _, newValue in
-                                // Auto-format phone number
-                                phoneNumber = formatPhoneNumber(newValue)
-                                
-                                // Auto-progress to OTP if phone number is complete
-                                if newValue.count >= 14 { // +1 (555) 123-4567
-                                    sendOTP()
-                                }
-                            }
-                    }
-                    .padding(.horizontal, 20)
+                // Simple phone number input
+                VStack(spacing: 20) {
+                    TextField("Phone number", text: $phoneNumber)
+                        .font(.title2)
+                        .keyboardType(.phonePad)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal, 20)
                     
                     // Send OTP button
                     Button(action: sendOTP) {
@@ -173,50 +157,34 @@ struct ClipContentView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
-                        .background(
-                            LinearGradient(
-                                colors: [.blue, .blue.opacity(0.8)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .background(Color.blue)
                         .cornerRadius(16)
-                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
                     }
-                    .buttonStyle(ScaleButtonStyle())
-                    .disabled(phoneNumber.count < 14 || isSendingOTP)
+                    .disabled(phoneNumber.isEmpty || isSendingOTP)
                 }
                 
-                // OTP input (shown after phone number is entered)
+                // Simple OTP input
                 if showOTPInput {
-                    VStack(spacing: 16) {
-                        Text("Enter the 6-digit code sent to your phone")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                    VStack(spacing: 20) {
+                        Text("Enter the 6-digit code")
+                            .font(.headline)
+                        
+                        TextField("123456", text: $otp)
+                            .font(.title)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.center)
-                        
-                        HStack(spacing: 12) {
-                            ForEach(0..<6, id: \.self) { index in
-                                OTPDigitField(
-                                    digit: binding(for: index),
-                                    isActive: index == activeOTPIndex
-                                )
+                            .onChange(of: otp) { _, newValue in
+                                if newValue.count == 6 {
+                                    verifyOTP()
+                                }
                             }
-                        }
-                        .onChange(of: otp) { _, newValue in
-                            // Auto-verify when 6 digits are entered
-                            if newValue.count == 6 {
-                                verifyOTP()
-                            }
-                        }
                         
-                        // Resend OTP button
                         Button("Resend Code") {
                             sendOTP()
                         }
                         .font(.caption)
                         .foregroundColor(.blue)
-                        .disabled(isVerifyingOTP)
                     }
                     .padding(.top, 20)
                 }
@@ -575,29 +543,8 @@ struct ClipContentView: View {
         }
     }
     
-    private func formatPhoneNumber(_ input: String) -> String {
-        let cleaned = input.filter { $0.isNumber }
-        let mask = "+1 (XXX) XXX-XXXX"
-        var result = ""
-        var index = cleaned.startIndex
-        
-        for ch in mask {
-            if ch == "X" {
-                if index < cleaned.endIndex {
-                    result.append(cleaned[index])
-                    index = cleaned.index(after: index)
-                } else {
-                    result.append("0")
-                }
-            } else {
-                result.append(ch)
-            }
-        }
-        return result
-    }
-    
     private func sendOTP() {
-        guard phoneNumber.count >= 14 else { return }
+        guard !phoneNumber.isEmpty else { return }
         
         isSendingOTP = true
         
@@ -605,7 +552,6 @@ struct ClipContentView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             isSendingOTP = false
             showOTPInput = true
-            smsMessage = "Success! OTP sent to \(phoneNumber)"
         }
     }
     
@@ -620,35 +566,7 @@ struct ClipContentView: View {
             isAuthenticated = true
             walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
             usdcBalance = 100.0 // Mock balance
-            smsMessage = "Wallet created successfully!"
         }
-    }
-    
-    private func binding(for index: Int) -> Binding<String> {
-        Binding(
-            get: {
-                if index < otp.count {
-                    return String(otp[otp.index(otp.startIndex, offsetBy: index)])
-                }
-                return ""
-            },
-            set: { newValue in
-                if newValue.count <= 1 {
-                    if index < otp.count {
-                        let startIndex = otp.index(otp.startIndex, offsetBy: index)
-                        let endIndex = otp.index(startIndex, offsetBy: 1)
-                        otp.replaceSubrange(startIndex..<endIndex, with: newValue)
-                    } else {
-                        otp.append(newValue)
-                    }
-                    
-                    // Move to next field
-                    if newValue.count == 1 && index < 5 {
-                        activeOTPIndex = index + 1
-                    }
-                }
-            }
-        )
     }
     
     private func disconnectWallet() {

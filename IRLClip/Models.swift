@@ -23,11 +23,7 @@ struct ClaimData: Codable {
     }
 }
 
-struct WalletUser {
-    let id: String
-    let address: String
-    let phone: String
-}
+// WalletUser model removed - not needed for simple flow
 
 enum AppMode {
     case initial
