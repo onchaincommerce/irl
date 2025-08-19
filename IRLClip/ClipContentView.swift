@@ -32,53 +32,63 @@ struct ClipContentView: View {
     }
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                // Header
-                VStack {
+        ZStack {
+            // Graph paper background
+            GraphPaperBackground()
+            
+            VStack(spacing: 0) {
+                // Header with devil emoji
+                VStack(spacing: 16) {
                     Image("irl_demon")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 80, height: 80)
+                        .frame(width: 100, height: 100)
                         .clipShape(Circle())
                         .overlay(
                             Circle()
-                                .stroke(Color.blue, lineWidth: 3)
+                                .stroke(Color.blue, lineWidth: 4)
                         )
-                        .shadow(color: .blue.opacity(0.3), radius: 10, x: 0, y: 5)
+                        .shadow(color: .blue.opacity(0.4), radius: 15, x: 0, y: 8)
                     
                     Text("IRL")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                        .font(.system(size: 48, weight: .black, design: .rounded))
                         .foregroundColor(.blue)
                     
                     Text("Instant value transfer between iPhones")
-                        .font(.subheadline)
+                        .font(.title3)
+                        .fontWeight(.medium)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
                 }
-                .padding(.top)
+                .padding(.top, 60)
                 
                 Spacer()
                 
                 // Main content based on mode
-                switch mode {
-                case .initial:
-                    initialView
-                case .sender:
-                    senderView
-                case .receiver:
-                    receiverView
-                case .claiming:
-                    claimingView
-                case .success:
-                    successView
+                if isAuthenticated {
+                    // User is authenticated, show main options
+                    authenticatedMainView
+                } else {
+                    // User needs to authenticate
+                    authenticationView
                 }
                 
                 Spacer()
+                
+                // Footer
+                VStack(spacing: 8) {
+                    Text("Powered by Coinbase Developer Platform")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Secure • Fast • Gasless")
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.8))
+                }
+                .padding(.bottom, 40)
             }
-            .padding()
-            .navigationBarHidden(true)
+            .padding(.horizontal, 24)
         }
         .alert("Error", isPresented: $showingError) {
             Button("OK") { }
@@ -86,75 +96,171 @@ struct ClipContentView: View {
             Text(errorMessage)
         }
         .onAppear {
-            // Check if we were invoked with a claim URL (receiver mode)
-            // For now, default to sender mode
-            mode = .sender
+            // Always start with authentication
+            mode = .initial
         }
     }
     
-    @ViewBuilder
-    private var initialView: some View {
-        VStack(spacing: 20) {
-            if isAuthenticated {
-                // User is authenticated, show send/receive options
-                VStack(spacing: 20) {
-                    // Wallet info
-                    VStack(spacing: 10) {
-                        Text("Wallet Connected")
-                            .font(.headline)
-                            .foregroundColor(.green)
+        @ViewBuilder
+    private var authenticationView: some View {
+        VStack(spacing: 32) {
+            // Main authentication card
+            VStack(spacing: 24) {
+                // Icon and title
+                VStack(spacing: 16) {
+                    Image(systemName: "iphone.radiowaves.left.and.right")
+                        .font(.system(size: 60))
+                        .foregroundColor(.blue)
+                        .symbolEffect(.bounce, options: .repeating)
+                    
+                    Text("Connect Your Wallet")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                }
+                
+                // Description
+                Text("Sign in with SMS to create your embedded wallet and start sending USDC instantly")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                
+                // SMS Authentication Button
+                Button(action: authenticateWithSMS) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "message.fill")
+                            .font(.title2)
                         
-                        Text(walletAddress.prefix(6) + "..." + walletAddress.suffix(4))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("USDC Balance: $\(usdcBalance, specifier: "%.2f")")
-                            .font(.subheadline)
+                        Text("Sign In with SMS")
+                            .font(.title3)
                             .fontWeight(.semibold)
                     }
-                    .padding()
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(10)
-                    
-                    Button("Send Money") {
-                        mode = .sender
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    
-                    Button("Receive Money") {
-                        mode = .receiver
-                        multipeerService.startBrowsing()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                    
-                    Button("Disconnect Wallet") {
-                        disconnectWallet()
-                    }
-                    .buttonStyle(.bordered)
-                    .foregroundColor(.red)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        LinearGradient(
+                            colors: [.blue, .blue.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(16)
+                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
                 }
-            } else {
-                // User needs to authenticate
-                VStack(spacing: 20) {
-                    Text("Connect Your Wallet")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text("Sign in to create bumps and send USDC")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    
-                    Button("Sign In with SMS") {
-                        authenticateWithSMS()
+                .buttonStyle(ScaleButtonStyle())
+                
+                // Security info
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .foregroundColor(.green)
+                        Text("Secure SMS verification")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    
+                    HStack(spacing: 8) {
+                        Image(systemName: "bolt.fill")
+                            .foregroundColor(.orange)
+                        Text("Instant wallet creation")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                            .foregroundColor(.blue)
+                        Text("No seed phrases needed")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
+            .padding(32)
+            .background(
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.1), radius: 20, x: 0, y: 10)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(.quaternary, lineWidth: 1)
+            )
         }
+        .padding(.horizontal, 20)
+    }
+    
+    @ViewBuilder
+    private var authenticatedMainView: some View {
+        VStack(spacing: 24) {
+            // Wallet info card
+            VStack(spacing: 16) {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.green)
+                    
+                    Text("Wallet Connected")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                }
+                
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Address:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(walletAddress.prefix(6) + "..." + walletAddress.suffix(4))
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    HStack {
+                        Text("USDC Balance:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("$\(String(format: "%.2f", usdcBalance))")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+            .padding(20)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+            )
+            
+            // Action buttons
+            VStack(spacing: 16) {
+                Button("Send USDC") {
+                    mode = .sender
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                
+                Button("Receive USDC") {
+                    mode = .receiver
+                    multipeerService.startBrowsing()
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                
+                Button("Disconnect Wallet") {
+                    disconnectWallet()
+                }
+                .buttonStyle(DangerButtonStyle())
+            }
+        }
+        .padding(.horizontal, 20)
     }
     
     @ViewBuilder
@@ -169,7 +275,7 @@ struct ClipContentView: View {
                 Text("Available Balance")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text("$\(usdcBalance, specifier: "%.2f") USDC")
+                Text("$\(String(format: "%.2f", usdcBalance)) USDC")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.green)
@@ -194,9 +300,9 @@ struct ClipContentView: View {
                         .font(.caption)
                         .foregroundColor(.red)
                 } else {
-                    Text("Remaining: $\(usdcBalance - amountValue, specifier: "%.2f")")
-                        .font(.caption)
-                        .foregroundColor(.green)
+                                    Text("Remaining: $\(String(format: "%.2f", usdcBalance - amountValue))")
+                    .font(.caption)
+                    .foregroundColor(.green)
                 }
             }
             
@@ -419,7 +525,7 @@ struct ClipContentView: View {
         
         // Check if user has sufficient balance
         guard amountValue <= usdcBalance else {
-            errorMessage = "Insufficient USDC balance. You have $\(usdcBalance, specifier: "%.2f")"
+            errorMessage = "Insufficient USDC balance. You have $\(String(format: "%.2f", usdcBalance))"
             showingError = true
             return
         }
