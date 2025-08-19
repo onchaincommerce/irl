@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { CDPProvider, useCDP } from '@coinbase/cdp-sdk';
+import { cdpService, WalletUser } from '@/lib/cdp-service';
 
 function ClaimPage() {
   const params = useParams();
@@ -10,6 +10,15 @@ function ClaimPage() {
   const [claimData, setClaimData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // SMS OTP states
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otp, setOtp] = useState('');
+  const [showOTPInput, setShowOTPInput] = useState(false);
+  const [isSendingSMS, setIsSendingSMS] = useState(false);
+  const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
+  const [walletUser, setWalletUser] = useState<WalletUser | null>(null);
+  const [smsMessage, setSmsMessage] = useState('');
 
   useEffect(() => {
     if (claimId) {
@@ -31,6 +40,57 @@ function ClaimPage() {
       setError('Failed to fetch claim data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendSMS = async () => {
+    if (!phoneNumber.trim()) {
+      setError('Please enter a valid phone number');
+      return;
+    }
+
+    setIsSendingSMS(true);
+    setError('');
+
+    try {
+      const result = await cdpService.initializeWallet(phoneNumber.trim());
+      
+      if (result.success) {
+        setShowOTPInput(true);
+        setSmsMessage(result.message);
+      } else {
+        setError(result.message);
+      }
+    } catch (err) {
+      setError('Failed to send SMS code');
+    } finally {
+      setIsSendingSMS(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otp.trim() || otp.length !== 6) {
+      setError('Please enter a valid 6-digit code');
+      return;
+    }
+
+    setIsVerifyingOTP(true);
+    setError('');
+
+    try {
+      const result = await cdpService.verifyOTPAndCreateWallet(phoneNumber.trim(), otp.trim());
+      
+      if (result.success && result.user) {
+        setWalletUser(result.user);
+        setSmsMessage(result.message);
+        // TODO: Proceed with claiming the funds
+      } else {
+        setError(result.message);
+      }
+    } catch (err) {
+      setError('Failed to verify OTP');
+    } finally {
+      setIsVerifyingOTP(false);
     }
   };
 
@@ -107,35 +167,87 @@ function ClaimPage() {
                   <input
                     type="tel"
                     id="phone"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="+1 (555) 123-4567"
                     className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={showOTPInput}
                   />
                 </div>
                 
-                <button className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors">
-                  Send SMS Code
+                <button 
+                  onClick={handleSendSMS}
+                  disabled={isSendingSMS || !phoneNumber.trim()}
+                  className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed"
+                >
+                  {isSendingSMS ? (
+                    <span className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Sending...
+                    </span>
+                  ) : (
+                    'Send SMS Code'
+                  )}
                 </button>
               </div>
               
-              {/* OTP Input (hidden initially) */}
-              <div className="hidden mt-4 space-y-3">
-                <div>
-                  <label htmlFor="otp" className="block text-sm font-medium text-blue-900 mb-1">
-                    Enter 6-digit code
-                  </label>
-                  <input
-                    type="text"
-                    id="otp"
-                    placeholder="123456"
-                    maxLength={6}
-                    className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-lg tracking-widest"
-                  />
+              {/* OTP Input */}
+              {showOTPInput && (
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <label htmlFor="otp" className="block text-sm font-medium text-blue-900 mb-1">
+                      Enter 6-digit code
+                    </label>
+                    <input
+                      type="text"
+                      id="otp"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="123456"
+                      maxLength={6}
+                      className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-center text-lg tracking-widest"
+                    />
+                  </div>
+                  
+                  <button 
+                    onClick={handleVerifyOTP}
+                    disabled={isVerifyingOTP || otp.length !== 6}
+                    className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors disabled:bg-green-400 disabled:cursor-not-allowed"
+                  >
+                    {isVerifyingOTP ? (
+                      <span className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Verifying...
+                      </span>
+                    ) : (
+                      'Verify & Create Wallet'
+                    )}
+                  </button>
                 </div>
-                
-                <button className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors">
-                  Verify & Create Wallet
-                </button>
-              </div>
+              )}
+              
+              {/* Error Message */}
+              {error && (
+                <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded-md">
+                  <p className="text-red-800 text-sm">{error}</p>
+                </div>
+              )}
+              
+              {/* Success Message */}
+              {smsMessage && (
+                <div className="mt-4 p-3 bg-green-100 border border-green-300 rounded-md">
+                  <p className="text-green-800 text-sm">{smsMessage}</p>
+                </div>
+              )}
+              
+              {/* Wallet Created Success */}
+              {walletUser && (
+                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
+                  <h4 className="text-green-900 font-semibold mb-2">Wallet Created Successfully!</h4>
+                  <p className="text-green-700 text-sm mb-2">Address: {walletUser.address}</p>
+                  <p className="text-green-700 text-sm">You can now claim your USDC!</p>
+                </div>
+              )}
             </div>
             
             <div className="text-center text-sm text-gray-500">
@@ -149,10 +261,4 @@ function ClaimPage() {
   );
 }
 
-export default function ClaimPageWrapper() {
-  return (
-    <CDPProvider projectId={process.env.NEXT_PUBLIC_CDP_PROJECT_ID!}>
-      <ClaimPage />
-    </CDPProvider>
-  );
-}
+export default ClaimPage;
