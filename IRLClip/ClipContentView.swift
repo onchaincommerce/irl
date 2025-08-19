@@ -17,6 +17,12 @@ struct ClipContentView: View {
     @State private var errorMessage = ""
     @State private var isCreatingClaim = false
     
+    // Sender authentication states
+    @State private var isAuthenticated = false
+    @State private var walletAddress: String = ""
+    @State private var usdcBalance: Double = 0.0
+    @State private var isCheckingBalance = false
+    
     enum AppMode {
         case initial
         case sender
@@ -89,18 +95,65 @@ struct ClipContentView: View {
     @ViewBuilder
     private var initialView: some View {
         VStack(spacing: 20) {
-            Button("Send Money") {
-                mode = .sender
+            if isAuthenticated {
+                // User is authenticated, show send/receive options
+                VStack(spacing: 20) {
+                    // Wallet info
+                    VStack(spacing: 10) {
+                        Text("Wallet Connected")
+                            .font(.headline)
+                            .foregroundColor(.green)
+                        
+                        Text(walletAddress.prefix(6) + "..." + walletAddress.suffix(4))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text("USDC Balance: $\(usdcBalance, specifier: "%.2f")")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .padding()
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(10)
+                    
+                    Button("Send Money") {
+                        mode = .sender
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    
+                    Button("Receive Money") {
+                        mode = .receiver
+                        multipeerService.startBrowsing()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    
+                    Button("Disconnect Wallet") {
+                        disconnectWallet()
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundColor(.red)
+                }
+            } else {
+                // User needs to authenticate
+                VStack(spacing: 20) {
+                    Text("Connect Your Wallet")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Text("Sign in to create bumps and send USDC")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    
+                    Button("Sign In with SMS") {
+                        authenticateWithSMS()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            
-            Button("Receive Money") {
-                mode = .receiver
-                multipeerService.startBrowsing()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
         }
     }
     
@@ -111,6 +164,20 @@ struct ClipContentView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
             
+            // Wallet balance display
+            VStack(spacing: 8) {
+                Text("Available Balance")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("$\(usdcBalance, specifier: "%.2f") USDC")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.green)
+            }
+            .padding()
+            .background(Color.green.opacity(0.1))
+            .cornerRadius(10)
+            
             HStack {
                 Text("$")
                     .font(.title)
@@ -118,6 +185,19 @@ struct ClipContentView: View {
                     .font(.title)
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.roundedBorder)
+            }
+            
+            // Balance check message
+            if let amountValue = Double(amount), amountValue > 0 {
+                if amountValue > usdcBalance {
+                    Text("Insufficient balance")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                } else {
+                    Text("Remaining: $\(usdcBalance - amountValue, specifier: "%.2f")")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                }
             }
             
             Button(action: createBump) {
@@ -133,7 +213,7 @@ struct ClipContentView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(amount.isEmpty || Double(amount) == nil || isCreatingClaim)
+            .disabled(amount.isEmpty || Double(amount) == nil || isCreatingClaim || (Double(amount) ?? 0) > usdcBalance)
             
             if multipeerService.isAdvertising {
                 VStack(spacing: 15) {
@@ -319,8 +399,30 @@ struct ClipContentView: View {
         }
     }
     
+    private func authenticateWithSMS() {
+        // TODO: Implement CDP Embedded Wallets authentication
+        // For now, simulate authentication
+        isAuthenticated = true
+        walletAddress = "0x1234567890abcdef1234567890abcdef12345678"
+        usdcBalance = 100.0 // Mock balance
+    }
+    
+    private func disconnectWallet() {
+        isAuthenticated = false
+        walletAddress = ""
+        usdcBalance = 0.0
+        mode = .initial
+    }
+    
     private func createBump() {
         guard let amountValue = Double(amount) else { return }
+        
+        // Check if user has sufficient balance
+        guard amountValue <= usdcBalance else {
+            errorMessage = "Insufficient USDC balance. You have $\(usdcBalance, specifier: "%.2f")"
+            showingError = true
+            return
+        }
         
         isCreatingClaim = true
         
